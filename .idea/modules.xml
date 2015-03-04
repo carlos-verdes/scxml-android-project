@@ -6,6 +6,7 @@
       <module fileurl="file://$PROJECT_DIR$/scxml-android-first-steps/scxml-android-first-steps.iml" filepath="$PROJECT_DIR$/scxml-android-first-steps/scxml-android-first-steps.iml" />
       <module fileurl="file://$PROJECT_DIR$/scxml-android-lib/scxml-android-lib.iml" filepath="$PROJECT_DIR$/scxml-android-lib/scxml-android-lib.iml" />
       <module fileurl="file://$PROJECT_DIR$/scxml-android-project.iml" filepath="$PROJECT_DIR$/scxml-android-project.iml" />
+      <module fileurl="file://$PROJECT_DIR$/watch-my-cam/watch-my-cam.iml" filepath="$PROJECT_DIR$/watch-my-cam/watch-my-cam.iml" />
     </modules>
   </component>
 </project>

@@ -12,6 +12,7 @@
             <option value="$PROJECT_DIR$/app" />
             <option value="$PROJECT_DIR$/scxml-android-first-steps" />
             <option value="$PROJECT_DIR$/scxml-android-lib" />
+            <option value="$PROJECT_DIR$/watch-my-cam" />
           </set>
         </option>
       </GradleProjectSettings>

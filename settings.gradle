@@ -1,1 +1,1 @@
-include ':app',':scxml-android-lib', ':scxml-android-first-steps'
+include ':app',':scxml-android-lib', ':scxml-android-first-steps', ':watch-my-cam'
