@@ -34,4 +34,7 @@ android {
 dependencies {
     compile fileTree(dir: 'libs', include: ['*.jar'])
     compile project(':scxml-android-lib')
+    compile ('commons-beanutils:commons-beanutils:1.9.2')
+
+
 }

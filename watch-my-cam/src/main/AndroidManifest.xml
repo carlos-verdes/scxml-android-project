@@ -25,12 +25,12 @@
         <!-- FSM service -->
         <service
             android:name=".service.MainFSMService"
-            android:process="com.nosolojava.android.remotecam.FSM" >
+            android:process="com.nosolojava.android.watchmycam.FSM" >
         </service>
         <!-- CAM service -->
         <service
             android:name=".service.Cam2Service"
-            android:process="com.nosolojava.android.remotecam.FSM" >
+            android:process="com.nosolojava.android.watchmycam.CAMERA" >
         </service>
 
     </application>
