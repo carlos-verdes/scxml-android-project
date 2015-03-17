@@ -3,8 +3,10 @@ package com.nosolojava.android.watchmycam;
 import android.content.Context;
 import android.net.Uri;
 import android.os.Bundle;
+import android.view.TextureView;
 import android.widget.ArrayAdapter;
 import android.widget.ListView;
+import android.widget.TextView;
 
 import com.nosolojava.android.fsm.view.impl.BasicFSMActivity;
 import com.nosolojava.android.watchmycam.service.MainFSMService;
@@ -22,6 +24,7 @@ public class MainActivity extends BasicFSMActivity {
     private ListView devicesListView;
     private List<String> devicesList = new ArrayList<>();
     private DevicesListAdapter devicesListAdapter;
+    private TextureView textureView=null;
 
     public static class DevicesListAdapter<String> extends ArrayAdapter<String> {
 
@@ -54,11 +57,21 @@ public class MainActivity extends BasicFSMActivity {
         }, DISCONNECTED_STATE);
     }
 
+    @Override
+    protected void onPause() {
+        super.onPause();
+
+        //release camera
+        pushEventToFSM("view.closeCurrentCamera");
+    }
+
     private void initDevicesAdapter() {
         if (this.devicesListView == null) {
             this.devicesListAdapter = new DevicesListAdapter(this, R.layout.device_row, R.id.deviceRowName, this.devicesList);
             this.devicesListView = (ListView) findViewById(R.id.devicesList);
             this.devicesListView.setAdapter(this.devicesListAdapter);
+
+            this.textureView=(TextureView)findViewById(R.id.textureView);
         }
     }
 

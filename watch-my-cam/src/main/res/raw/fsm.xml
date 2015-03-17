@@ -66,8 +66,36 @@
 		   	        <transition event="service.camera.getDevices.error">
 		   	            <assign location="cameraState" expr="'Error getting devices'" />
 		   	        </transition>
-		   	        
+                    <transition event="view.openCamera" target="camera-working-state">
+
+                    </transition>
 		   	    </state>
+                <!-- camera working state -->
+                <state id="camera-working-state">
+                    <!-- opening camera -->
+                    <state id="camera-opening-state">
+                        <onentry>
+                            <assign location="cameraState" expr="'opening'" />
+                            <send type="invoked-service" event="controller.action.openCamera" target="#cameraService">
+                                <content expr="cameraDevices[0]" />
+                            </send>
+                        </onentry>
+                        <transition event="service.camera.opened" target="camera-opened-state" />
+                        <transition event="service.camera.disconnected service.camera.error service.camera.closed" target="camera-ready-state" />
+                    </state>
+                    <!-- camera opened -->
+                    <state id="camera-opened-state">
+                        <onentry>
+                            <assign location="cameraState" expr="'opened'" />
+                        </onentry>
+                        <transition event="view.closeCurrentCamera" target="camera-ready-state">
+                            <send type="invoked-service" event="controller.action.closeCurrentCamera" target="#cameraService" />
+                        </transition>
+                        <transition event="view.takePicture" type="internal">
+                            <send type="invoked-service" event="controller.action.takePicture" target="#cameraService" />
+                        </transition>
+                    </state>
+                </state>
 		   	</state>
 		</parallel>
 	</state>

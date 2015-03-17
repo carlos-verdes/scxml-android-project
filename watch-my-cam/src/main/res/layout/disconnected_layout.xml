@@ -47,14 +47,42 @@
         android:layout_height="144dp"
         android:layout_below="@+id/camDevicesTag"
         />
-    <Button 
+    <Button
+        android:id="@+id/retryButton"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_below="@id/devicesList"
-        android:id="@+id/loginButton"
         android:text="@string/retry"
         fsm:onclick="view.retry"/>
 
+    <Button
+        android:id="@+id/openCameraButton"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_below="@id/devicesList"
+        android:layout_toRightOf="@id/retryButton"
+        android:layout_marginLeft="8dp"
+        android:text="start"
+        fsm:state="camera-ready-state"
+        fsm:onclick="view.openCamera"/>
+
+    <Button
+        android:id="@+id/takePictureButton"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_below="@id/devicesList"
+        android:layout_toRightOf="@id/retryButton"
+        android:layout_marginLeft="8dp"
+        android:text="picture"
+        fsm:state="camera-opened-state"
+        fsm:onclick="view.takePicture"/>
+
+    <TextureView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:id="@+id/textureView"
+        android:layout_below="@+id/retryButton"
+        android:layout_alignParentStart="true" />
 
 
 </RelativeLayout>
