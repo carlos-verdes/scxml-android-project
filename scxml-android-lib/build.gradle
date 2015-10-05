@@ -19,7 +19,7 @@ android {
 }
 
 dependencies {
-    compile('com.nosolojava.fsm:scxml-java-implementation:1.0.1-SNAPSHOT'){
+    compile('com.nosolojava.fsm:scxml-java-implementation:1.0.1'){
         exclude group: "xpp3"
         exclude group: "xmlpull"
         exclude group: "commons-logging"
