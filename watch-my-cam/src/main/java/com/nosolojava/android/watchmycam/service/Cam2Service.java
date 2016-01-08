@@ -3,16 +3,13 @@ package com.nosolojava.android.watchmycam.service;
 import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.ImageFormat;
 import android.graphics.SurfaceTexture;
 import android.hardware.Camera;
-import android.hardware.camera2.CameraAccessException;
-import android.hardware.camera2.CameraCaptureSession;
-import android.hardware.camera2.CameraCharacteristics;
-import android.hardware.camera2.CameraDevice;
-import android.hardware.camera2.CameraManager;
-import android.hardware.camera2.CaptureRequest;
-import android.hardware.camera2.TotalCaptureResult;
+import android.hardware.camera2.*;
+import android.hardware.camera2.CameraCaptureSession.CaptureCallback;
 import android.hardware.camera2.params.StreamConfigurationMap;
 import android.media.Image;
 import android.media.ImageReader;
@@ -34,10 +31,7 @@ import com.nosolojava.android.fsm.io.MESSAGE_DATA;
 
 import org.apache.commons.beanutils.MethodUtils;
 
-import java.io.File;
-import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
-import java.io.IOException;
+import java.io.*;
 import java.lang.reflect.Method;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -62,6 +56,7 @@ public class Cam2Service extends Service {
 
     private final Pattern controllerActionPattern = Pattern.compile("controller\\.action\\.(.*)$");
     private CameraDevice currentDevice = null;
+
 
     /**
      * Handler of incoming messages from clients.
@@ -116,60 +111,60 @@ public class Cam2Service extends Service {
         sendEventToFSM("service.camera.getDevices.result", Arrays.asList(devicesIds));
     }
 
+    protected CameraDevice.StateCallback cameraStateCallback = new CameraDevice.StateCallback() {
+        @Override
+        public void onOpened(CameraDevice camera) {
+            currentDevice = camera;
+
+            logI(String.format("Camera opened %s", camera.getId()));
+            Toast.makeText(getApplicationContext(), "Camera opened", Toast.LENGTH_SHORT).show();
+
+            sendEventToFSM("service.camera.opened", camera.getId());
+        }
+
+        @Override
+        public void onDisconnected(CameraDevice camera) {
+
+            closeCurrentCamera();
+
+
+            logI(String.format("Camera disconnected %s", camera.getId()));
+            Toast.makeText(getApplicationContext(), "Camera disconnected", Toast.LENGTH_SHORT).show();
+
+            sendEventToFSM("service.camera.disconnected", camera.getId());
+
+        }
+
+        @Override
+        public void onError(CameraDevice camera, int error) {
+            closeCurrentCamera();
+
+            logE(String.format("Error opening camera %s, errorCode: %d", camera.getId(), error));
+            Toast.makeText(getApplicationContext(), "Camera error when opening", Toast.LENGTH_SHORT).show();
+
+            sendEventToFSM("service.camera.error", camera.getId());
+
+        }
+
+        @Override
+        public void onClosed(CameraDevice camera) {
+            super.onClosed(camera);
+
+            currentDevice = null;
+
+            logE(String.format("Camera closed %s", camera.getId()));
+            Toast.makeText(getApplicationContext(), "Camera closed", Toast.LENGTH_SHORT).show();
+
+            sendEventToFSM("service.camera.closed", camera.getId());
+
+        }
+    };
+
+
     public void openCamera(Message msg) throws CameraAccessException {
         String deviceId = msg.getData().getString(MESSAGE_DATA.CONTENT.toString());
 
         Handler openCameraHandler = this.internalHandler;
-
-        CameraDevice.StateCallback cameraStateCallback = new CameraDevice.StateCallback() {
-            @Override
-            public void onOpened(CameraDevice camera) {
-                currentDevice = camera;
-
-                logI(String.format("Camera opened %s", camera.getId()));
-                Toast.makeText(getApplicationContext(), "Camera opened", Toast.LENGTH_SHORT).show();
-
-                sendEventToFSM("service.camera.opened", camera.getId());
-            }
-
-            @Override
-            public void onDisconnected(CameraDevice camera) {
-
-                closeCurrentCamera();
-
-
-                logI(String.format("Camera disconnected %s", camera.getId()));
-                Toast.makeText(getApplicationContext(), "Camera disconnected", Toast.LENGTH_SHORT).show();
-
-                sendEventToFSM("service.camera.disconnected", camera.getId());
-
-            }
-
-            @Override
-            public void onError(CameraDevice camera, int error) {
-                closeCurrentCamera();
-
-                logE(String.format("Error opening camera %s, errorCode: %d", camera.getId(), error));
-                Toast.makeText(getApplicationContext(), "Camera error when opening", Toast.LENGTH_SHORT).show();
-
-                sendEventToFSM("service.camera.error", camera.getId());
-
-            }
-
-            @Override
-            public void onClosed(CameraDevice camera) {
-                super.onClosed(camera);
-
-                currentDevice = null;
-
-                logE(String.format("Camera closed %s", camera.getId()));
-                Toast.makeText(getApplicationContext(), "Camera closed", Toast.LENGTH_SHORT).show();
-
-                sendEventToFSM("service.camera.closed", camera.getId());
-
-            }
-        };
-
         this.manager.openCamera(deviceId, cameraStateCallback, openCameraHandler);
 
     }
@@ -178,118 +173,226 @@ public class Cam2Service extends Service {
         closeCurrentCamera();
     }
 
-    public static class CustomGLSurfaceView extends GLSurfaceView  implements GLSurfaceView.Renderer{
 
-        public CustomGLSurfaceView(Context context) {
-            super(context);
-            logI("gl surfaceView created");
-
-        }
-
+    protected CameraCaptureSession.StateCallback previewStateCallback = new CameraCaptureSession.StateCallback() {
 
         @Override
-        public void onSurfaceCreated(GL10 gl, EGLConfig config) {
-            logI("gl surface created");
-        }
+        public void onConfigured(CameraCaptureSession session) {
+            logI("CaptureSession--> configured");
+            sendEventToFSM("service.camera.capture.session.configured", session.getDevice().getId());
 
-        @Override
-        public void onSurfaceChanged(GL10 gl, int width, int height) {
-            logI("gl surface changed");
+
+            try {
+                mPreviewBuilder.set(CaptureRequest.CONTROL_MODE, CameraMetadata.CONTROL_MODE_AUTO);
+                session.setRepeatingRequest(mPreviewBuilder.build(), null, internalHandler);
+            } catch (CameraAccessException e) {
+                logE("Error sending repeating request",e);
+            }
 
         }
 
         @Override
-        public void onDrawFrame(GL10 gl) {
-            logI("gl draw frame");
+        public void onConfigureFailed(CameraCaptureSession session) {
+            logI("CaptureSession--> configureFailed");
+            sendEventToFSM("service.camera.capture.session.configureFailed", session.getDevice().getId());
 
         }
-    }
 
-    public void takePicture(Message msg) throws CameraAccessException {
+        @Override
+        public void onReady(CameraCaptureSession session) {
+            super.onReady(session);
+            logI("CaptureSession--> ready");
+            sendEventToFSM("service.camera.capture.session.ready", session.getDevice().getId());
 
+        }
+
+        @Override
+        public void onActive(CameraCaptureSession session) {
+            super.onActive(session);
+
+            logI("CaptureSession--> active");
+            sendEventToFSM("service.camera.capture.session.active", session.getDevice().getId());
+
+        }
+
+        @Override
+        public void onClosed(CameraCaptureSession session) {
+            super.onClosed(session);
+
+            logI("CaptureSession--> closed");
+            sendEventToFSM("service.camera.capture.session.closed", session.getDevice().getId());
+
+        }
+    };
+
+    protected ImageReader.OnImageAvailableListener onImageReadyListener = new ImageReader.OnImageAvailableListener() {
+        @Override
+        public void onImageAvailable(ImageReader reader) {
+            logI("new image");
+
+            byte[] imageBytes;
+            while ((imageBytes = getLastImageBytes(reader)) != null) {
+
+                sendEventToFSM("service.camera.capture.newImage", imageBytes);
+            }
+        }
+    };
+
+    protected CaptureRequest.Builder mPreviewBuilder = null;
+
+    public void startPreviewSession(Message msg) throws CameraAccessException {
+        logI("Start preview Session");
 
         //get camera characteristics
-        CameraCharacteristics cameraCharacteristics = manager.getCameraCharacteristics(this.currentDevice.getId());
+        final CameraCharacteristics cameraCharacteristics = manager.getCameraCharacteristics(this.currentDevice.getId());
 
-        StreamConfigurationMap configs= cameraCharacteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
-
-        Size[] sizes= configs.getOutputSizes(ImageFormat.JPEG);
-
-
-        final ImageReader imageReader= ImageReader.newInstance(sizes[0].getWidth(), sizes[0].getHeight(),ImageFormat.JPEG,2);
+        //config session
+        final StreamConfigurationMap configs = cameraCharacteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
+        final Size[] sizes = configs.getOutputSizes(ImageFormat.JPEG);
+        final ImageReader imageReader = ImageReader.newInstance(sizes[0].getWidth(), sizes[0].getHeight(), ImageFormat.JPEG, 2);
         final Surface jpegSurface = imageReader.getSurface();
-
-        List<Surface> outputs= new ArrayList<Surface>();
+        final List<Surface> outputs = new ArrayList<>();
         outputs.add(jpegSurface);
 
-        currentDevice.createCaptureSession(outputs,new CameraCaptureSession.StateCallback() {
-            @Override
-            public void onConfigured(CameraCaptureSession session) {
-                logI("on camera session configured");
 
-                try {
-                    CaptureRequest.Builder snapshotBuilder = currentDevice.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE);
-                    snapshotBuilder.addTarget(jpegSurface);
+        //create capture request
+        mPreviewBuilder = currentDevice.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
+        mPreviewBuilder.addTarget(jpegSurface);
 
-                    CaptureRequest snapshotRequest = snapshotBuilder.build();
 
-                    session.capture(snapshotRequest,new CameraCaptureSession.CaptureCallback() {
-                        @Override
-                        public void onCaptureStarted(CameraCaptureSession session, CaptureRequest request, long timestamp, long frameNumber) {
-                            super.onCaptureStarted(session, request, timestamp, frameNumber);
-                        }
+        // create session
+        currentDevice.createCaptureSession(outputs, previewStateCallback, this.internalHandler);
 
-                        @Override
-                        public void onCaptureCompleted(CameraCaptureSession session, CaptureRequest request, TotalCaptureResult result) {
-                            super.onCaptureCompleted(session, request, result);
-
-                            Image image = imageReader.acquireLatestImage();
-
-                            if(image!=null){
-
-                                File sdCardDirectory = Environment.getExternalStorageDirectory();
-                                File imageFile = new File(sdCardDirectory, "test.jpg");
-
-                                ByteBuffer buffer = image.getPlanes()[0].getBuffer();
-                                byte[] bytes = new byte[buffer.remaining()];
-                                buffer.get(bytes);
-                                FileOutputStream output = null;
-                                try {
-                                    output = new FileOutputStream(imageFile);
-                                    output.write(bytes);
-                                } catch (FileNotFoundException e) {
-                                    e.printStackTrace();
-                                } catch (IOException e) {
-                                    e.printStackTrace();
-                                } finally {
-                                    image.close();
-                                    if (null != output) {
-                                        try {
-                                            output.close();
-                                        } catch (IOException e) {
-                                            e.printStackTrace();
-                                        }
-                                    }
-                                }
-
-                            }
-
-                        }
-                    },internalHandler);
-
-                } catch (CameraAccessException e) {
-                    logE("error creating snapshot",e);
-                }
-            }
-
-            @Override
-            public void onConfigureFailed(CameraCaptureSession session) {
-                logE("on camera session error");
-            }
-        },this.internalHandler);
-
+        imageReader.setOnImageAvailableListener(onImageReadyListener, this.internalHandler);
 
     }
+
+
+    protected byte[] getLastImageBytes(ImageReader reader) {
+        byte[] result = null;
+        try (Image image = reader.acquireLatestImage()) {
+            if (image != null) {
+                result = getImageBytes(image);
+            }
+        }
+
+        return result;
+    }
+
+    protected byte[] getImageBytes(Image image) {
+        byte[] result = null;
+
+        ByteBuffer buffer = image.getPlanes()[0].getBuffer();
+
+        byte[] bytes = new byte[buffer.remaining()];
+        buffer.get(bytes);
+
+        try (ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+
+            output.write(bytes);
+
+            result = output.toByteArray();
+        } catch (IOException e) {
+            logE("Error getting image bytes", e);
+        } finally {
+            image.close();
+        }
+
+        return result;
+
+    }
+
+//    public void takePicture(Message msg) throws CameraAccessException {
+//
+//        logI("Taking picture");
+//
+//
+//        //get camera characteristics
+//        CameraCharacteristics cameraCharacteristics = manager.getCameraCharacteristics(this.currentDevice.getId());
+//
+//        StreamConfigurationMap configs = cameraCharacteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
+//
+//        Size[] sizes = configs.getOutputSizes(ImageFormat.JPEG);
+//
+//
+//        final ImageReader imageReader = ImageReader.newInstance(sizes[0].getWidth(), sizes[0].getHeight(), ImageFormat.JPEG, 2);
+//        final Surface jpegSurface = imageReader.getSurface();
+//
+//        List<Surface> outputs = new ArrayList<Surface>();
+//        outputs.add(jpegSurface);
+//
+//        currentDevice.createCaptureSession(outputs, new CameraCaptureSession.StateCallback() {
+//            @Override
+//            public void onConfigured(CameraCaptureSession session) {
+//                logI("on camera session configured");
+//
+//                try {
+//                    CaptureRequest.Builder snapshotBuilder = currentDevice.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE);
+//                    snapshotBuilder.addTarget(jpegSurface);
+//
+//                    CaptureRequest snapshotRequest = snapshotBuilder.build();
+//
+//                    session.capture(snapshotRequest, new CameraCaptureSession.CaptureCallback() {
+//                        @Override
+//                        public void onCaptureStarted(CameraCaptureSession session, CaptureRequest request, long timestamp, long frameNumber) {
+//                            logI("On picture capture started");
+//                            super.onCaptureStarted(session, request, timestamp, frameNumber);
+//                        }
+//
+//                        @Override
+//                        public void onCaptureCompleted(CameraCaptureSession session, CaptureRequest request, TotalCaptureResult result) {
+//                            logI("On picture capture completed");
+//                            super.onCaptureCompleted(session, request, result);
+//
+//                            Image image = imageReader.acquireLatestImage();
+//
+//                            if (image != null) {
+//
+//                                File sdCardDirectory = Environment.getExternalStorageDirectory();
+//                                File imageFile = new File(sdCardDirectory, "test.jpg");
+//                                logI(String.format("saving jpg in file %s", imageFile));
+//
+//
+//                                ByteBuffer buffer = image.getPlanes()[0].getBuffer();
+//                                byte[] bytes = new byte[buffer.remaining()];
+//                                buffer.get(bytes);
+//                                FileOutputStream output = null;
+//                                try {
+//                                    output = new FileOutputStream(imageFile);
+//                                    output.write(bytes);
+//                                } catch (FileNotFoundException e) {
+//                                    e.printStackTrace();
+//                                } catch (IOException e) {
+//                                    e.printStackTrace();
+//                                } finally {
+//                                    image.close();
+//                                    if (null != output) {
+//                                        try {
+//                                            output.close();
+//                                        } catch (IOException e) {
+//                                            e.printStackTrace();
+//                                        }
+//                                    }
+//                                }
+//
+//                            }
+//
+//                        }
+//                    }, internalHandler);
+//
+//                } catch (CameraAccessException e) {
+//                    logE("error creating snapshot", e);
+//                }
+//            }
+//
+//            @Override
+//            public void onConfigureFailed(CameraCaptureSession session) {
+//                logE("on camera session error");
+//            }
+//        }, this.internalHandler);
+//
+//
+//    }
 
     private void closeCurrentCamera() {
         if (currentDevice != null) {
@@ -311,6 +414,8 @@ public class Cam2Service extends Service {
     @Override
     public void onDestroy() {
         logI("destroying cam service");
+
+        closeCurrentCamera();
         super.onDestroy();
     }
 

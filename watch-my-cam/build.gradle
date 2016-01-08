@@ -4,6 +4,9 @@ android {
     compileSdkVersion 21
     buildToolsVersion "21.1.2"
 
+    lintOptions {
+        abortOnError false
+    }
     defaultConfig {
         applicationId "com.nosolojava.android.watchmycam"
         minSdkVersion 21

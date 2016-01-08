@@ -1,60 +1,54 @@
 package com.nosolojava.android.watchmycam;
 
-import android.content.Context;
+import android.graphics.*;
 import android.net.Uri;
 import android.os.Bundle;
+import android.util.Log;
 import android.view.TextureView;
-import android.widget.ArrayAdapter;
-import android.widget.ListView;
-import android.widget.TextView;
-
 import com.nosolojava.android.fsm.view.impl.BasicFSMActivity;
 import com.nosolojava.android.watchmycam.service.MainFSMService;
 import com.nosolojava.fsm.runtime.ContextInstance;
+import com.nosolojava.fsm.runtime.Event;
 
-import java.util.ArrayList;
-import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 
-public class MainActivity extends BasicFSMActivity {
-    private static final String DISCONNECTED_STATE = "disconnected-state";
+/**
+ * Created by cverdes on 04/01/2016.
+ */
+public class MainActivity extends BasicFSMActivity implements TextureView.SurfaceTextureListener {
 
     private static final Uri FSM_URI = Uri
-            .parse("android.resource://com.nosolojava.android.watchmycam/raw/fsm#remotecamSession");
+            .parse("android.resource://com.nosolojava.android.watchmycam/raw/fsm#wathMyCamSession");
 
-    private ListView devicesListView;
-    private List<String> devicesList = new ArrayList<>();
-    private DevicesListAdapter devicesListAdapter;
-    private TextureView textureView=null;
-
-    public static class DevicesListAdapter<String> extends ArrayAdapter<String> {
-
-        public DevicesListAdapter(Context context, int resource, int textViewResourceId, List<String> objects) {
-            super(context, resource, textViewResourceId, objects);
-        }
-
-        public DevicesListAdapter(Context context, int resource, List<String> objects) {
-            super(context, resource, objects);
-        }
-    }
 
     public MainActivity() {
-
         super(MainFSMService.class, R.layout.loading_layout, FSM_URI);
     }
 
+    private TextureView textureView = null;
+    private final AtomicBoolean firstPreview = new AtomicBoolean(false);
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
+        this.associateStateView(R.layout.loading_layout, null, "camera-loading-state");
+        this.associateStateView(R.layout.camera_on_layout, new Runnable() {
+                    @Override
+                    public void run() {
 
-        this.associateStateView(R.layout.disconnected_layout, new Runnable() {
-            @Override
-            public void run() {
-                initDevicesAdapter();
+                        textureView = (TextureView) findViewById(R.id.cameraTextureView);
+                        textureView.setSurfaceTextureListener(MainActivity.this);
 
-            }
-        }, DISCONNECTED_STATE);
+                    }
+                }
+                , "camera-service-ready-state", "camera-opening-state", "camera-opened-state");
+
+
+        this.associateStateView(R.layout.camera_closed_layout, null, "camera-closed-state");
+        this.associateStateView(R.layout.off_layout, null, "off-state");
+
+
     }
 
     @Override
@@ -62,38 +56,61 @@ public class MainActivity extends BasicFSMActivity {
         super.onPause();
 
         //release camera
-        pushEventToFSM("view.closeCurrentCamera");
+        pushEventToFSM("exit");
     }
-
-    private void initDevicesAdapter() {
-        if (this.devicesListView == null) {
-            this.devicesListAdapter = new DevicesListAdapter(this, R.layout.device_row, R.id.deviceRowName, this.devicesList);
-            this.devicesListView = (ListView) findViewById(R.id.devicesList);
-            this.devicesListView.setAdapter(this.devicesListAdapter);
-
-            this.textureView=(TextureView)findViewById(R.id.textureView);
-        }
-    }
-
 
     @Override
     public void onNewStateConfig(ContextInstance contextInstance) {
         super.onNewStateConfig(contextInstance);
 
-        //if camera is ready
-        if (contextInstance.isStateActive("camera-ready-state")) {
-            //try to get the devices
-            List<String> devices = contextInstance.getDataByName("cameraDevices");
-            if (devices != null && devices.size() > 0) {
-                this.devicesList.clear();
-                this.devicesList.addAll(devices);
-                if (devicesListAdapter != null) {
-                    this.devicesListAdapter.notifyDataSetChanged();
-                }
+        if (contextInstance.isStateActive("camera-opened-state") && !contextInstance.isStateActive("camera-preview-idle-state")) {
+            byte[] imageBytes = contextInstance.getDataByName("lastImage");
+            if (imageBytes != null) {
+                Bitmap image = BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.length);
+
+
+                Canvas canvas = textureView.lockCanvas();
+                canvas.drawBitmap(image, 0, 0, new Paint());
+                textureView.unlockCanvasAndPost(canvas);
+
             }
-
-
         }
 
+//        if (contextInstance.isStateActive("camera-opened-state") && !firstPreview.get()) {
+//            firstPreview.getAndSet(true);
+//            pushEventToFSM("view.takePicture");
+//        }
+    }
+
+    @Override
+    public void onSurfaceTextureAvailable(SurfaceTexture surface, int width, int height) {
+
+        pushEventToFSM("view.surface.available");
+//        firstPreview.getAndSet(true);
+//        pushEventToFSM("view.takePicture");
+    }
+
+    @Override
+    public void onSurfaceTextureSizeChanged(SurfaceTexture surface, int width, int height) {
+        pushEventToFSM("view.surface.sizeChanged");
+
+    }
+
+    @Override
+    public boolean onSurfaceTextureDestroyed(SurfaceTexture surface) {
+        pushEventToFSM("view.surface.destroyed");
+
+        return false;
+    }
+
+    @Override
+    public void onSurfaceTextureUpdated(SurfaceTexture surface) {
+        pushEventToFSM("view.surface.updated");
+
+
+    }
+
+    public void logI(String message) {
+        Log.i("WMC-ACTIVITY", message);
     }
 }

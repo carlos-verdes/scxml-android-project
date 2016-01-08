@@ -1,107 +1,150 @@
-<scxml name="basicStates" version="1.0"	xmlns="http://www.w3.org/2005/07/scxml"
-	initial="main-state">
+<scxml name="basicStates" version="1.0" xmlns="http://www.w3.org/2005/07/scxml"
+       initial="main-state">
     <datamodel>
-        <data id="welcome" expr="'Hello world from FSM!!'" />
-        <data id="state" expr="'init'" />
-        <data id="principal" expr="null"/>
-        <data id="username" expr="''"/>
-        <data id="cameraState" expr="'...'" />
-        <data id="cameraDevices" expr="null" />
+        <data id="state" expr="'init'"/>
+        <data id="cameraDevices" expr="null"/>
+        <data id="currentDevice" expr="null"/>
+        <data id="lastImage" expr="null" />
+
     </datamodel>
 
-    <!-- main state -->
-	<state id="main-state">
-        <!-- app paralel states -->
-		<parallel id="main-paralel-states">
-		    <!-- main ui states -->
-			<state id="main-ui-state">
-				<initial>
-					<transition target="disconnected-state"  />
-				</initial>
-				<!-- update data from view -->
-				<transition event="view.valueBinding.newVal" type="internal">
-				    <assign location="_event.data.name" expr="_event.data.value"></assign>
-				</transition>
-				<state id="disconnected-state">
-					<onentry>
-						<assign location="state" expr="'disconnected'" />
-					</onentry>
-					<transition event="connect" target="connected-state">
-					    <!-- 
-						<assign location="principal" expr="_event.data" />
-						 -->
-						<assign location="welcome" expr="'Hi: '+username" />
-					</transition>
-				</state>
-				<state id="connected-state">
-					<onentry>
-						<assign location="state" expr="'connected'" />
-					</onentry>
-					<transition event="disconnect" target="disconnected-state" />
-				</state>
-				<transition event="exit" target="off-state" />
-			</state>
-		   	<!-- camera states -->
-		   	<state id="camera-main-state">
-		   	    <invoke id="cameraService" type="service" autoforward="false" src="class:com.nosolojava.android.watchmycam.service.Cam2Service" />
-		   	    <!-- camera loading -->
-		   	    <state id="camera-loading-state">
-		   	        <onentry>
-		   	            <assign location="cameraState" expr="'loading...'" />
-		   	        </onentry>
-		   	        <transition event="service.camera.ready" target="camera-ready-state" />
-		   	    </state>
-		   	    <!-- camera ready -->
-		   	    <state id="camera-ready-state">
-		   	        <onentry>
-		   	            <assign location="cameraState" expr="'ready'" />
-		   	            <send type="invoked-service" event="controller.action.getDevices" namelist="welcome" target="#cameraService" />
-		   	        </onentry>
-		   	        <transition event="view.retry" type="internal" >
-		   	            <send type="invoked-service" event="controller.action.getDevices" namelist="welcome" target="#cameraService" />
-					</transition>
-		   	        <transition event="service.camera.getDevices.result">
-		   	            <assign location="cameraDevices" expr="_event.data" />
-		   	        </transition>
-		   	        <transition event="service.camera.getDevices.error">
-		   	            <assign location="cameraState" expr="'Error getting devices'" />
-		   	        </transition>
-                    <transition event="view.openCamera" target="camera-working-state">
+    <!-- main parallel states -->
+    <parallel id="main-parallel-states">
 
-                    </transition>
-		   	    </state>
-                <!-- camera working state -->
-                <state id="camera-working-state">
-                    <!-- opening camera -->
-                    <state id="camera-opening-state">
-                        <onentry>
-                            <assign location="cameraState" expr="'opening'" />
-                            <send type="invoked-service" event="controller.action.openCamera" target="#cameraService">
-                                <content expr="cameraDevices[0]" />
-                            </send>
-                        </onentry>
-                        <transition event="service.camera.opened" target="camera-opened-state" />
-                        <transition event="service.camera.disconnected service.camera.error service.camera.closed" target="camera-ready-state" />
-                    </state>
-                    <!-- camera opened -->
-                    <state id="camera-opened-state">
-                        <onentry>
-                            <assign location="cameraState" expr="'opened'" />
-                        </onentry>
-                        <transition event="view.closeCurrentCamera" target="camera-ready-state">
-                            <send type="invoked-service" event="controller.action.closeCurrentCamera" target="#cameraService" />
-                        </transition>
-                        <transition event="view.takePicture" type="internal">
-                            <send type="invoked-service" event="controller.action.takePicture" target="#cameraService" />
-                        </transition>
-                    </state>
+        <!-- main state -->
+        <state id="main-state">
+            <!-- exit event -->
+            <transition event="exit" target="off-state"/>
+
+            <!-- invoke camera service -->
+            <invoke id="cameraService" type="service" autoforward="false"
+                    src="class:com.nosolojava.android.watchmycam.service.Cam2Service"/>
+            <!-- camera loading -->
+            <state id="camera-loading-state">
+                <onentry>
+                    <assign location="state" expr="'loading...'"/>
+                </onentry>
+                <transition event="service.camera.ready" target="camera-service-ready-state"/>
+            </state>
+            <!-- camera service ready -->
+            <state id="camera-service-ready-state">
+                <onentry>
+                    <assign location="state" expr="'ready'"/>
+                    <!-- if surface is ready ask service for devices -->
+                    <if cond="In('surface-available')">
+                        <send type="invoked-service" event="controller.action.getDevices" target="#cameraService"/>
+                    </if>
+
+                </onentry>
+                <!-- when surface is ready  get devices-->
+                <transition event="view.surface.available">
+                    <send type="invoked-service" event="controller.action.getDevices" target="#cameraService"/>
+                </transition>
+
+                <!-- on device list event go to camera preview state -->
+                <transition event="service.camera.getDevices.result" target="camera-opening-state">
+                    <!-- choose first device and raise event -->
+                    <assign location="cameraDevices" expr="_event.data"/>
+                    <assign location="currentDevice" expr="cameraDevices[0]"/>
+                </transition>
+            </state>
+            <!-- camera state transitions -->
+            <transition event="service.camera.opened" target="camera-opened-state" type="internal"/>
+            <transition event="service.camera.disconnected service.camera.error service.camera.closed"
+                        target="camera-closed-state" type="internal"/>
+            <!-- opening camera -->
+            <state id="camera-opening-state">
+                <onentry>
+                    <assign location="state" expr="'opening'"/>
+                    <send type="invoked-service" event="controller.action.openCamera" target="#cameraService">
+                        <content expr="currentDevice"/>
+                    </send>
+                </onentry>
+            </state>
+            <!-- camera opened -->
+            <state id="camera-opened-state">
+                <onentry>
+                    <assign location="state" expr="'opened'"/>
+                    <raise event="controller.camera.opened"/>
+                    <send type="invoked-service" event="controller.action.startPreviewSession" target="#cameraService"/>
+                </onentry>
+                <!-- last image -->
+                <transition event="service.camera.capture.newImage" type="internal">
+                    <assign location="lastImage" expr="_event.data" />
+                </transition>
+
+                <!-- preview session states -->
+                <transition event="service.camera.capture.session.configured" target="camera-preview-configured-state" type="internal"/>
+                <transition event="service.camera.capture.session.configureFailed" target="camera-preview-configureFailed-state" type="internal"/>
+                <transition event="service.camera.capture.session.ready" target="camera-preview-ready-state" type="internal"/>
+                <transition event="service.camera.capture.session.active" target="camera-preview-active-state" type="internal"/>
+                <transition event="service.camera.capture.session.closed" target="camera-preview-closed-state" type="internal"/>
+                <state id="camera-preview-idle-state">
+                    <onentry>
+                        <assign location="state" expr="'camera opened idle'"/>
+                    </onentry>
                 </state>
-		   	</state>
-		</parallel>
-	</state>
-	<final id="off-state">
-	    <onentry>
-	        <assign location="state" expr="'ended'" />
-	    </onentry>
-	</final>
+                <!-- configured -->
+                <state id="camera-preview-configured-state">
+                    <onentry>
+                        <assign location="state" expr="'camera preview configured'"/>
+                    </onentry>
+                </state>
+                <!-- configureFailed -->
+                <state id="camera-preview-configureFailed-state">
+                    <onentry>
+                        <assign location="state" expr="'camera preview configureFailed'"/>
+                    </onentry>
+                </state>
+                <!-- ready -->
+                <state id="camera-preview-ready-state">
+                    <onentry>
+                        <assign location="state" expr="'camera preview ready'"/>
+                    </onentry>
+                </state>
+                <!-- active -->
+                <state id="camera-preview-active-state">
+                    <onentry>
+                        <assign location="state" expr="'camera preview active'"/>
+                    </onentry>
+                </state>
+                <!-- closed -->
+                <state id="camera-preview-closed-state">
+                    <onentry>
+                        <assign location="state" expr="'camera preview closed'"/>
+                    </onentry>
+                </state>
+            </state>
+            <!-- camera closed -->
+            <state id="camera-closed-state">
+                <onentry>
+                    <assign location="state" expr="'camera closed'"/>
+                </onentry>
+                <transition event="service.camera.opened" target="camera-opened-state"/>
+                <transition event="view.retry" target="camera-opening-state"/>
+            </state>
+
+
+        </state>
+        <!-- surface states -->
+        <state id="surface-states">
+            <state id="surface-not-available">
+                <onentry>
+                    <raise event="view.surface.notAvailable"/>
+                </onentry>
+                <transition event="view.surface.available" target="surface-available" type="internal"/>
+            </state>
+            <state id="surface-available">
+                <onentry>
+                    <raise event="view.surface.available"/>
+                </onentry>
+                <transition event="view.surface.destroyed" target="surface-not-available" type="internal"/>
+            </state>
+        </state>
+    </parallel>
+    <final id="off-state">
+        <onentry>
+            <assign location="state" expr="'ended'"/>
+        </onentry>
+    </final>
 </scxml>

@@ -15,8 +15,16 @@
             <option value="$PROJECT_DIR$/watch-my-cam" />
           </set>
         </option>
+        <option name="myModules">
+          <set>
+            <option value="$PROJECT_DIR$" />
+            <option value="$PROJECT_DIR$/app" />
+            <option value="$PROJECT_DIR$/scxml-android-first-steps" />
+            <option value="$PROJECT_DIR$/scxml-android-lib" />
+            <option value="$PROJECT_DIR$/watch-my-cam" />
+          </set>
+        </option>
       </GradleProjectSettings>
     </option>
   </component>
 </project>
-
