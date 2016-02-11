@@ -72,6 +72,8 @@ public class FSMActivityIntegrationHelper {
 		this.fsmIntentFilter.addAction(FSM_ACTIONS.FSM_SESSION_INITIATED.toString());
 		this.fsmIntentFilter.addAction(FSM_ACTIONS.FSM_SESSION_ENDED.toString());
 		this.fsmIntentFilter.addAction(FSM_ACTIONS.FSM_NEW_SESSION_CONFIG.toString());
+		this.fsmIntentFilter.addAction(FSM_ACTIONS.FSM_TO_ACTIVITY_EVENT.toString());
+
 
 		this.fsmIntentFilter.addDataScheme("fsm");
 		this.fsmIntentFilter.addDataAuthority(this.fsmSession, null);

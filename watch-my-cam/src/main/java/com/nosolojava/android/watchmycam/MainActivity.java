@@ -2,6 +2,7 @@ package com.nosolojava.android.watchmycam;
 
 import android.graphics.*;
 import android.net.Uri;
+import android.os.AsyncTask;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.TextureView;
@@ -10,6 +11,9 @@ import com.nosolojava.android.watchmycam.service.MainFSMService;
 import com.nosolojava.fsm.runtime.ContextInstance;
 import com.nosolojava.fsm.runtime.Event;
 
+import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -42,7 +46,7 @@ public class MainActivity extends BasicFSMActivity implements TextureView.Surfac
 
                     }
                 }
-                , "camera-service-ready-state", "camera-opening-state", "camera-opened-state");
+                , "camera-service-ready-state", "camera-opening-state", "camera-opened-state", "view.pause");
 
 
         this.associateStateView(R.layout.camera_closed_layout, null, "camera-closed-state");
@@ -56,25 +60,94 @@ public class MainActivity extends BasicFSMActivity implements TextureView.Surfac
         super.onPause();
 
         //release camera
-        pushEventToFSM("exit");
+        pushEventToFSM("view.pause");
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+
+        //release camera
+        pushEventToFSM("view.exit");
+
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+
+        pushEventToFSM("view.resume");
+
+    }
+
+    @Override
+    public void onNewEvent(String eventName) {
+
+    }
+
+
+    @Override
+    public void onNewEvent(String eventName, Object payload) {
+
+        if ("controller.newImage".equals(eventName)) {
+            Map<String, Object> data = (Map<String, Object>) payload;
+
+            new AsyncTask<Object, Object, Bitmap>() {
+                @Override
+                protected Bitmap doInBackground(Object[] params) {
+                    Map<String, Object> data = (Map<String, Object>) params[0];
+
+                    byte[] imageBytes = (byte[]) data.get("lastImage");
+                    int counter = (int) data.get("imageCounter");
+                    //logI("Draw image aync" + counter);
+
+
+                    if (imageBytes != null) {
+                        Bitmap image = BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.length);
+                        return image;
+
+                    }
+
+                    return null;
+                }
+
+                @Override
+                protected void onPostExecute(Bitmap image) {
+                    super.onPostExecute(image);
+                    if (image != null) {
+                        //logI("post execute");
+                        Canvas canvas = textureView.lockCanvas();
+                        if (canvas != null) {
+                            canvas.drawBitmap(image, 0, 0, new Paint());
+                            textureView.unlockCanvasAndPost(canvas);
+                        } else {
+
+                        }
+                    }
+
+                }
+            }.execute(data);
+
+
+        }
     }
 
     @Override
     public void onNewStateConfig(ContextInstance contextInstance) {
         super.onNewStateConfig(contextInstance);
 
-        if (contextInstance.isStateActive("camera-opened-state") && !contextInstance.isStateActive("camera-preview-idle-state")) {
-            byte[] imageBytes = contextInstance.getDataByName("lastImage");
-            if (imageBytes != null) {
-                Bitmap image = BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.length);
-
-
-                Canvas canvas = textureView.lockCanvas();
-                canvas.drawBitmap(image, 0, 0, new Paint());
-                textureView.unlockCanvasAndPost(canvas);
-
-            }
-        }
+//        if (contextInstance.isStateActive("camera-opened-state") && !contextInstance.isStateActive("camera-preview-idle-state")) {
+//            byte[] imageBytes = contextInstance.getDataByName("lastImage");
+//            if (imageBytes != null) {
+//                Bitmap image = BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.length);
+//
+//
+//                Canvas canvas = textureView.lockCanvas();
+//                canvas.drawBitmap(image, 0, 0, new Paint());
+//                textureView.unlockCanvasAndPost(canvas);
+//
+//            }
+//        }
 
 //        if (contextInstance.isStateActive("camera-opened-state") && !firstPreview.get()) {
 //            firstPreview.getAndSet(true);

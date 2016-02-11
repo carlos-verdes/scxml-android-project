@@ -23,7 +23,7 @@ public class BasicFSMActivity extends Activity implements FSMActivityIntegration
 
 	@Override
 	protected void onStart() {
-		super.onResume();
+		super.onStart();
 		// bind with fsm
 		fsmHelper.bindWithFSM();
 
@@ -87,4 +87,13 @@ public class BasicFSMActivity extends Activity implements FSMActivityIntegration
 
 	}
 
+	@Override
+	public void onNewEvent(String eventName) {
+
+	}
+
+	@Override
+	public void onNewEvent(String eventName, Object payload) {
+
+	}
 }
